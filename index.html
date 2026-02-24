@@ -1,115 +1,49 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Design System | Job Notification App</title>
-    <meta name="description" content="Official design system for the Job Notification App. Premium SaaS foundation.">
+    <title>Job Notification App</title>
+    <meta name="description" content="Premium Job Notification Service.">
     <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
 
     <div class="app-container">
-        <!-- TOP BAR -->
+        <!-- TOP BAR / NAVIGATION -->
         <header class="top-bar">
-            <div class="logo"><strong>Job Notification App</strong></div>
-            <div class="progress">Step 1 / 1</div>
-            <div class="status" style="justify-self: end;">
-                <span class="badge">In Progress</span>
+            <div class="logo-container">
+                <a href="/" class="nav-link" style="text-decoration: none; color: inherit;">
+                    <strong>Job Notification App</strong>
+                </a>
+            </div>
+
+            <nav>
+                <button class="mobile-nav-toggle" id="mobile-toggle">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </button>
+                <ul class="nav-links" id="nav-menu">
+                    <li><a href="/dashboard" class="nav-link">Dashboard</a></li>
+                    <li><a href="/saved" class="nav-link">Saved</a></li>
+                    <li><a href="/digest" class="nav-link">Digest</a></li>
+                    <li><a href="/settings" class="nav-link">Settings</a></li>
+                    <li><a href="/proof" class="nav-link">Proof</a></li>
+                </ul>
+            </nav>
+
+            <div class="status-indicator">
+                <span class="badge">V1.0.0</span>
             </div>
         </header>
 
-        <!-- CONTEXT HEADER -->
-        <section class="context-header">
-            <h1>Design System Foundation</h1>
-            <p class="subtext">A coherent, calm, and intentional visual language for high-intent B2C experiences.</p>
-        </section>
-
-        <!-- MAIN LAYOUT -->
-        <main class="main-layout">
-            
-            <!-- PRIMARY WORKSPACE (70%) -->
-            <div class="primary-workspace">
-                <div class="card">
-                    <h2>Color Palette</h2>
-                    <p>The system uses a maximum of 4 primary shades to maintain clarity and focus.</p>
-                    <div style="display: flex; gap: 16px; margin-top: 24px;">
-                        <div style="text-align: center;">
-                            <div style="width: 80px; height: 80px; background: #F7F6F3; border: 1px solid #ddd; border-radius: 4px;"></div>
-                            <span style="font-size: 12px;">Background</span>
-                        </div>
-                        <div style="text-align: center;">
-                            <div style="width: 80px; height: 80px; background: #111111; border-radius: 4px;"></div>
-                            <span style="font-size: 12px;">Primary Text</span>
-                        </div>
-                        <div style="text-align: center;">
-                            <div style="width: 80px; height: 80px; background: #8B0000; border-radius: 4px;"></div>
-                            <span style="font-size: 12px;">Accent</span>
-                        </div>
-                        <div style="text-align: center;">
-                            <div style="width: 80px; height: 80px; background: #5F7A61; border-radius: 4px;"></div>
-                            <span style="font-size: 12px;">Success</span>
-                        </div>
-                        <div style="text-align: center;">
-                            <div style="width: 80px; height: 80px; background: #D4A373; border-radius: 4px;"></div>
-                            <span style="font-size: 12px;">Warning</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="card">
-                    <h2>Typography</h2>
-                    <p>Bold serif headings pair with clean sans-serif body text for a premium editorial feel.</p>
-                    <div style="border-top: 1px solid rgba(0,0,0,0.05); padding-top: 24px; margin-top: 24px;">
-                        <h1 style="margin-bottom: 8px;">The quick brown fox.</h1>
-                        <p style="margin-bottom: 24px;">Body text at 18px with 1.8 line height ensures maximum readability for long-form job descriptions and notifications.</p>
-                        
-                        <div style="display: flex; gap: 24px;">
-                            <button class="btn btn-primary">Primary Action</button>
-                            <button class="btn btn-secondary">Secondary Action</button>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="card">
-                    <h2>Form Elements</h2>
-                    <div class="mb-24">
-                        <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 8px;">Email Address</label>
-                        <input type="email" placeholder="e.g. name@company.com">
-                    </div>
-                    <div>
-                        <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 8px;">Notes</label>
-                        <textarea rows="4" placeholder="Enter additional context..."></textarea>
-                    </div>
-                </div>
-            </div>
-
-            <!-- SECONDARY PANEL (30%) -->
-            <aside class="secondary-panel">
-                <div class="card">
-                    <h3>Design Philosophy</h3>
-                    <p style="font-size: 16px;">This design system is built to minimize cognitive load. Every pixel serves a purpose. No flashes, no distractors.</p>
-                    
-                    <div class="mb-24">
-                        <h4 style="font-size: 14px; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px;">System Tokens</h4>
-                        <div class="prompt-box">
-                            --color-accent: #8B0000;<br>
-                            --space-3: 24px;<br>
-                            --radius: 4px;
-                            <button class="btn btn-secondary copy-btn">Copy</button>
-                        </div>
-                    </div>
-
-                    <button class="btn btn-primary" style="width: 100%;">Finalize Phase</button>
-                </div>
-
-                <div class="card" style="background: rgba(139, 0, 0, 0.05); border-color: var(--color-accent);">
-                    <h4 style="color: var(--color-accent);">Pro Tip</h4>
-                    <p style="font-size: 14px; margin-bottom: 0;">Use the secondary panel for explanations and auxiliary actions that don't block the main workflow.</p>
-                </div>
-            </aside>
-
-        </main>
+        <!-- DYNAMIC CONTENT AREA -->
+        <div id="app-content">
+            <!-- Content injected by app.js -->
+        </div>
 
         <!-- PROOF FOOTER -->
         <footer class="proof-footer">
@@ -124,4 +58,5 @@
 
     <script src="app.js"></script>
 </body>
+
 </html>
