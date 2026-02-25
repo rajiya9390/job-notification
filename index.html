@@ -11,47 +11,40 @@
 
 <body>
 
-    <div class="app-container">
-        <!-- TOP BAR / NAVIGATION -->
+    <div class="app-wrapper">
+        <!-- TOP BAR -->
         <header class="top-bar">
-            <div class="logo-container">
-                <a href="/" class="nav-link" style="text-decoration: none; color: inherit;">
-                    <strong>Job Notification App</strong>
-                </a>
-            </div>
-
-            <nav>
-                <button class="mobile-nav-toggle" id="mobile-toggle">
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                </button>
-                <ul class="nav-links" id="nav-menu">
-                    <li><a href="/dashboard" class="nav-link">Dashboard</a></li>
-                    <li><a href="/saved" class="nav-link">Saved</a></li>
-                    <li><a href="/digest" class="nav-link">Digest</a></li>
-                    <li><a href="/settings" class="nav-link">Settings</a></li>
-                    <li><a href="/proof" class="nav-link">Proof</a></li>
-                </ul>
-            </nav>
-
-            <div class="status-indicator">
-                <span class="badge">V1.0.0</span>
+            <div class="top-bar-left">Job Notification App</div>
+            <div class="top-bar-center" id="progress-indicator">Step 1 / 4</div>
+            <div class="top-bar-right">
+                <span class="status-badge" id="status-badge">Not Started</span>
             </div>
         </header>
 
-        <!-- DYNAMIC CONTENT AREA -->
-        <div id="app-content">
-            <!-- Content injected by app.js -->
-        </div>
+        <!-- DYNAMIC CONTENT -->
+        <main id="app-root">
+            <!-- Context Header and Main Grid will be injected here -->
+        </main>
 
         <!-- PROOF FOOTER -->
         <footer class="proof-footer">
             <ul class="footer-checklist">
-                <li><span style="font-size: 18px;">□</span> UI Built</li>
-                <li><span style="font-size: 18px;">□</span> Logic Working</li>
-                <li><span style="font-size: 18px;">□</span> Test Passed</li>
-                <li><span style="font-size: 18px;">□</span> Deployed</li>
+                <li class="checklist-item done">
+                    <span class="check-box"></span>
+                    UI Built
+                </li>
+                <li class="checklist-item">
+                    <span class="check-box"></span>
+                    Logic Working
+                </li>
+                <li class="checklist-item">
+                    <span class="check-box"></span>
+                    Test Passed
+                </li>
+                <li class="checklist-item">
+                    <span class="check-box"></span>
+                    Deployed
+                </li>
             </ul>
         </footer>
     </div>
