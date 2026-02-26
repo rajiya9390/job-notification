@@ -1,6 +1,6 @@
 /**
- * Job Notification Tracker - Intelligence Layer
- * Implements preference logic and deterministic match scoring.
+ * Job Notification Tracker - intelligence Layer v2
+ * Implements preference logic, match scoring, and Daily Digest Engine.
  */
 
 const App = {
@@ -104,20 +104,17 @@ const App = {
                 this.navigate(path);
             }
 
-            if (e.target.matches('.btn-view')) {
-                this.viewJobDetails(e.target.dataset.id);
-            }
-            if (e.target.matches('.btn-save')) {
-                this.toggleSaveJob(e.target.dataset.id, e.target);
-            }
-            if (e.target.matches('.modal-close')) {
-                this.closeModal();
-            }
+            if (e.target.matches('.btn-view')) this.viewJobDetails(e.target.dataset.id);
+            if (e.target.matches('.btn-save')) this.toggleSaveJob(e.target.dataset.id, e.target);
+            if (e.target.matches('.modal-close')) this.closeModal();
+
+            // Digest Listeners
+            if (e.target.id === 'generate-digest') this.generateDailyDigest();
+            if (e.target.id === 'copy-digest') this.copyDigestToClipboard();
+            if (e.target.id === 'email-digest') this.emailDigestDraft();
         });
 
-        window.addEventListener('popstate', () => {
-            this.renderRoute(window.location.pathname);
-        });
+        window.addEventListener('popstate', () => this.renderRoute(window.location.pathname));
 
         if (this.mobileToggle) {
             this.mobileToggle.addEventListener('click', () => {
@@ -155,35 +152,23 @@ const App = {
     // --- MATCH ENGINE ---
 
     calculateMatchScore(job) {
-        if (!this.prefs.roleKeywords && !this.prefs.experienceLevel) return 0;
-
+        if (!this.prefs.roleKeywords && !this.prefs.skills) return 0;
         let score = 0;
         const keywords = this.prefs.roleKeywords.split(',').map(k => k.trim().toLowerCase()).filter(k => k);
         const userSkills = this.prefs.skills.split(',').map(s => s.trim().toLowerCase()).filter(s => s);
 
-        // 1. Role Keywords in Title (+25) or Description (+15)
         const inTitle = keywords.some(k => job.title.toLowerCase().includes(k));
         const inDesc = keywords.some(k => job.description.toLowerCase().includes(k));
-        if (inTitle) score += 25;
-        else if (inDesc) score += 15;
+        if (inTitle) score += 25; else if (inDesc) score += 15;
 
-        // 2. Preferred Locations (+15)
         if (this.prefs.preferredLocations.includes(job.location)) score += 15;
-
-        // 3. Preferred Mode (+10)
         if (this.prefs.preferredMode.includes(job.mode)) score += 10;
-
-        // 4. Experience Level (+10)
         if (job.experience === this.prefs.experienceLevel) score += 10;
 
-        // 5. Skills overlap (+15)
         const hasSkillMatch = job.skills.some(s => userSkills.includes(s.toLowerCase()));
         if (hasSkillMatch) score += 15;
 
-        // 6. Recency (+5)
         if (job.postedDaysAgo <= 2) score += 5;
-
-        // 7. Source LinkedIn (+5)
         if (job.source === 'LinkedIn') score += 5;
 
         return Math.min(score, 100);
@@ -196,266 +181,208 @@ const App = {
         return 'score-low';
     },
 
+    // --- DIGEST ENGINE ---
+
+    generateDailyDigest() {
+        const today = new Date().toISOString().split('T')[0];
+        const key = `jobTrackerDigest_${today}`;
+
+        // Calculate scores for all jobs
+        const scoredJobs = this.jobs.map(job => ({
+            ...job,
+            matchScore: this.calculateMatchScore(job)
+        }));
+
+        // Filter and sort for top 10
+        const top10 = scoredJobs
+            .filter(j => j.matchScore > 0)
+            .sort((a, b) => b.matchScore - a.matchScore || a.postedDaysAgo - b.postedDaysAgo)
+            .slice(0, 10);
+
+        localStorage.setItem(key, JSON.stringify(top10));
+        this.renderDigest();
+    },
+
+    getTodayDigest() {
+        const today = new Date().toISOString().split('T')[0];
+        return JSON.parse(localStorage.getItem(`jobTrackerDigest_${today}`));
+    },
+
+    copyDigestToClipboard() {
+        const digest = this.getTodayDigest();
+        if (!digest) return;
+
+        const text = digest.map((j, i) =>
+            `${i + 1}. ${j.title} @ ${j.company}\n   Score: ${j.matchScore}% | ${j.location}\n   Apply: ${j.applyUrl}`
+        ).join('\n\n');
+
+        navigator.clipboard.writeText(`My 9AM Job Digest - ${new Date().toDateString()}\n\n${text}`).then(() => {
+            alert('Digest copied to clipboard.');
+        });
+    },
+
+    emailDigestDraft() {
+        const digest = this.getTodayDigest();
+        if (!digest) return;
+
+        const body = digest.map(j =>
+            `${j.title} at ${j.company} (${j.matchScore}% Match)\nLocation: ${j.location}\nApply: ${j.applyUrl}`
+        ).join('\n\n');
+
+        window.location.href = `mailto:?subject=My 9AM Job Digest&body=${encodeURIComponent(body)}`;
+    },
+
     // --- PAGE RENDERERS ---
 
-    renderDashboard() {
+    renderDigest() {
         const hasPrefs = this.prefs.roleKeywords || this.prefs.skills;
+        const digest = this.getTodayDigest();
+        const todayStr = new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
         this.root.innerHTML = `
             <header class="context-header">
-                <h1>Intelligence Feed</h1>
-                <p class="subtext">Personalized job discovery engine.</p>
+                <h1>Daily Digest</h1>
+                <p class="subtext">Curated intelligence delivered every morning.</p>
             </header>
-            <div class="main-grid" style="grid-template-columns: 1fr;">
-                ${!hasPrefs ? `<div class="banner">Set your preferences to activate intelligent matching.</div>` : ''}
-                
-                <div class="filter-bar">
-                    <div class="filter-group" style="flex: 2;">
-                        <label class="filter-label">Search</label>
-                        <input type="text" id="search-input" class="filter-input" placeholder="Title/Company...">
+            
+            <div class="digest-container">
+                ${!hasPrefs ? `
+                    <div class="empty-state">
+                        <h3>Configuration Required</h3>
+                        <p>Set preferences to generate a personalized digest.</p>
+                        <a href="/settings" class="btn btn-secondary">Go to Settings</a>
                     </div>
-                    <div class="filter-group">
-                        <label class="filter-label">Location</label>
-                        <select id="location-select" class="filter-input">
-                            <option value="">All Locations</option>
-                            ${[...new Set(this.jobs.map(j => j.location))].sort().map(l => `<option value="${l}">${l}</option>`).join('')}
-                        </select>
+                ` : !digest ? `
+                    <div class="empty-state">
+                        <h3>No Digest Generated Yet</h3>
+                        <p>Simulate the automated 9AM trigger to view your top matches.</p>
+                        <button class="btn btn-primary mt-16" id="generate-digest">Generate Today's 9AM Digest (Simulated)</button>
                     </div>
-                    <div class="filter-group">
-                        <label class="filter-label">Sort By</label>
-                        <select id="sort-select" class="filter-input">
-                            <option value="latest">Latest</option>
-                            <option value="score">Match Score</option>
-                            <option value="salary">Salary (High)</option>
-                        </select>
+                ` : digest.length === 0 ? `
+                    <div class="empty-state">
+                        <h3>No matching roles today.</h3>
+                        <p>Our engine couldn't find any high-intent roles matching your profile in the last 24 hours. Check again tomorrow.</p>
                     </div>
-                    <div class="filter-group" style="justify-content: flex-end; flex: 0 0 auto;">
-                        <div class="toggle-container">
-                            <span>Only High Matches</span>
-                            <label class="switch">
-                                <input type="checkbox" id="match-toggle">
-                                <span class="slider"></span>
-                            </label>
+                ` : `
+                    <div class="digest-card">
+                        <div class="digest-email-header">
+                            <h2 class="serif">Top ${digest.length} Jobs For You — 9AM Digest</h2>
+                            <p style="color:rgba(17,17,17,0.5); font-weight:500;">${todayStr}</p>
+                        </div>
+                        
+                        <div class="digest-list">
+                            ${digest.map(job => `
+                                <div class="digest-item">
+                                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                                        <h3 class="serif" style="font-size:20px;">${job.title}</h3>
+                                        <div class="score-badge ${this.getScoreClass(job.matchScore)}">${job.matchScore}%</div>
+                                    </div>
+                                    <div class="digest-item-meta">
+                                        <strong>${job.company}</strong>  &bull;  ${job.location} &bull; ${job.experience}
+                                    </div>
+                                    <div class="mt-8">
+                                        <a href="${job.applyUrl}" target="_blank" class="btn btn-secondary" style="font-size:12px; padding:6px 12px;">Apply Now</a>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+
+                        <div class="digest-footer">
+                            This digest was generated based on your preferences and intelligence threshold.<br>
+                            <span style="font-weight:600; color:var(--color-accent);">Demo Mode: Daily 9AM trigger simulated manually.</span>
                         </div>
                     </div>
-                </div>
 
-                <div class="primary-workspace">
-                    <div id="job-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 24px;"></div>
-                </div>
+                    <div class="digest-actions-bar">
+                        <button class="btn btn-secondary" id="copy-digest">Copy Digest to Clipboard</button>
+                        <button class="btn btn-primary" id="email-digest">Create Email Draft</button>
+                        <button class="btn btn-secondary" id="generate-digest" style="opacity:0.6; font-size:12px;">Regenerate</button>
+                    </div>
+                `}
             </div>
         `;
+    },
 
-        // Filter listeners
-        ['search-input', 'location-select', 'sort-select', 'match-toggle'].forEach(id => {
+    renderDashboard() {
+        const hasPrefs = this.prefs.roleKeywords || this.prefs.skills;
+        this.root.innerHTML = `
+            <header class="context-header"><h1>Intelligence Feed</h1><p class="subtext">Personalized job discovery engine.</p></header>
+            <div class="main-grid" style="grid-template-columns: 1fr;">
+                ${!hasPrefs ? `<div class="banner">Set your preferences to activate intelligent matching.</div>` : ''}
+                <div class="filter-bar">
+                    <div class="filter-group" style="flex:2;"><label class="filter-label">Search</label><input type="text" id="search-input" class="filter-input" placeholder="Title/Company..."></div>
+                    <div class="filter-group"><label class="filter-label">Sort</label><select id="sort-select" class="filter-input"><option value="latest">Latest</option><option value="score">Match Score</option></select></div>
+                    <div class="filter-group" style="justify-content:flex-end;"><div class="toggle-container"><span>Only High Matches</span><label class="switch"><input type="checkbox" id="match-toggle"><span class="slider"></span></label></div></div>
+                </div>
+                <div class="primary-workspace"><div id="job-list" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(340px, 1fr)); gap:24px;"></div></div>
+            </div>
+        `;
+        ['search-input', 'sort-select', 'match-toggle'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.addEventListener('input', () => this.applyFilters());
         });
-
         this.applyFilters();
     },
 
     applyFilters() {
         const query = document.getElementById('search-input')?.value.toLowerCase() || '';
-        const loc = document.getElementById('location-select')?.value || '';
         const sort = document.getElementById('sort-select')?.value || 'latest';
         const onlyMatches = document.getElementById('match-toggle')?.checked || false;
-
         let filtered = this.jobs.map(job => ({ ...job, matchScore: this.calculateMatchScore(job) }));
-
-        // 1. Mandatory Filter AND Logic
         filtered = filtered.filter(job => {
             const matchesQuery = job.title.toLowerCase().includes(query) || job.company.toLowerCase().includes(query);
-            const matchesLoc = !loc || job.location === loc;
             const matchesThreshold = !onlyMatches || job.matchScore >= this.prefs.minMatchScore;
-            return matchesQuery && matchesLoc && matchesThreshold;
+            return matchesQuery && matchesThreshold;
         });
-
-        // 2. Sorting
-        if (sort === 'score') {
-            filtered.sort((a, b) => b.matchScore - a.matchScore);
-        } else if (sort === 'salary') {
-            const parseSalary = (s) => parseInt(s.replace(/[^0-9]/g, '')) || 0;
-            filtered.sort((a, b) => parseSalary(b.salaryRange) - parseSalary(a.salaryRange));
-        } else {
-            filtered.sort((a, b) => a.postedDaysAgo - b.postedDaysAgo);
-        }
-
+        if (sort === 'score') filtered.sort((a, b) => b.matchScore - a.matchScore);
+        else filtered.sort((a, b) => a.postedDaysAgo - b.postedDaysAgo);
         const listEl = document.getElementById('job-list');
-        if (!listEl) return;
-
-        if (filtered.length === 0) {
-            listEl.innerHTML = `
-                <div class="empty-state" style="grid-column: 1/-1;">
-                    <h3>No roles match your criteria.</h3>
-                    <p>Adjust filters or lower your matching threshold.</p>
-                </div>
-            `;
-            return;
-        }
-
-        listEl.innerHTML = filtered.map(job => this.renderJobCard(job)).join('');
+        if (listEl) listEl.innerHTML = filtered.length ? filtered.map(job => this.renderJobCard(job)).join('') : `<div class="empty-state" style="grid-column:1/-1;"><h3>No roles match your criteria.</h3></div>`;
     },
 
     renderJobCard(job) {
         const scoreClass = this.getScoreClass(job.matchScore);
         const savedIds = JSON.parse(localStorage.getItem('savedJobs') || '[]');
-        const isSaved = savedIds.includes(job.id.toString());
-
-        return `
-            <div class="job-card">
-                <div class="job-header">
-                    <div>
-                        <div class="job-title">${job.title}</div>
-                        <div class="job-company">${job.company}</div>
-                    </div>
-                    <div class="score-badge ${scoreClass}">${job.matchScore}% Match</div>
-                </div>
-                <div class="job-meta">
-                    <div class="meta-item">📍 ${job.location}</div>
-                    <div class="meta-item">🕒 ${job.mode}</div>
-                    <div class="meta-item">💼 ${job.experience}</div>
-                </div>
-                <div style="font-size: 15px; font-weight: 600; color: #4A5D4E;">${job.salaryRange}</div>
-                <div class="job-actions">
-                    <button class="btn btn-secondary btn-view" data-id="${job.id}">View</button>
-                    <button class="btn btn-secondary btn-save" data-id="${job.id}">${isSaved ? 'Saved' : 'Save'}</button>
-                    <a href="${job.applyUrl}" target="_blank" class="btn btn-primary">Apply</a>
-                </div>
-            </div>
-        `;
+        return `<div class="job-card"><div class="job-header"><div><div class="job-title">${job.title}</div><div class="job-company">${job.company}</div></div><div class="score-badge ${scoreClass}">${job.matchScore}% Match</div></div><div class="job-meta"><div class="meta-item">📍 ${job.location}</div><div class="meta-item">🕒 ${job.mode}</div></div><div class="job-actions"><button class="btn btn-secondary btn-view" data-id="${job.id}">View</button><button class="btn btn-secondary btn-save" data-id="${job.id}">${savedIds.includes(job.id.toString()) ? 'Saved' : 'Save'}</button><a href="${job.applyUrl}" target="_blank" class="btn btn-primary">Apply</a></div></div>`;
     },
 
     renderSettings() {
         this.root.innerHTML = `
-            <header class="context-header">
-                <h1>Preferences</h1>
-                <p class="subtext">Configure matching logic for intentional job discovery.</p>
-            </header>
-            <div class="main-grid">
-                <div class="primary-workspace">
-                    <div class="card">
-                        <h2 class="card-title">Preference Profile</h2>
-                        
-                        <div class="form-group">
-                            <label class="form-label">Ideal Roles</label>
-                            <input type="text" id="role-keywords" placeholder="e.g. Frontend Engineer, SDE Intern" value="${this.prefs.roleKeywords}">
-                            <span style="font-size:12px; color:rgba(17,17,17,0.4);">Comma separated keywords.</span>
-                        </div>
-
-                        <div class="form-group">
-                            <label class="form-label">Tech Stack (Skills)</label>
-                            <input type="text" id="skills-input" placeholder="e.g. React, Node, SQL" value="${this.prefs.skills}">
-                        </div>
-
-                        <div class="form-row" style="display:grid; grid-template-columns:1fr 1fr; gap:20px;">
-                            <div class="form-group">
-                                <label class="form-label">Preferred Location</label>
-                                <select id="pref-location-select" multiple style="height:100px;">
-                                    ${[...new Set(this.jobs.map(j => j.location))].sort().map(l =>
-            `<option value="${l}" ${this.prefs.preferredLocations.includes(l) ? 'selected' : ''}>${l}</option>`
-        ).join('')}
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label">Exp Level</label>
-                                <select id="pref-exp">
-                                    <option value="">Any</option>
-                                    <option value="Fresher" ${this.prefs.experienceLevel === 'Fresher' ? 'selected' : ''}>Fresher</option>
-                                    <option value="0-1" ${this.prefs.experienceLevel === '0-1' ? 'selected' : ''}>0-1 Year</option>
-                                    <option value="1-3" ${this.prefs.experienceLevel === '1-3' ? 'selected' : ''}>1-3 Years</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <div class="form-group">
-                            <label class="form-label">Work Style</label>
-                            <div class="radio-group mt-8">
-                                ${['Remote', 'Hybrid', 'Onsite'].map(mode => `
-                                    <label class="radio-option">
-                                        <input type="checkbox" class="pref-mode" value="${mode}" ${this.prefs.preferredMode.includes(mode) ? 'checked' : ''}> ${mode}
-                                    </label>
-                                `).join('')}
-                            </div>
-                        </div>
-
-                        <div class="form-group mt-16">
-                            <label class="form-label">Minimum Match Threshold: <span id="threshold-val">${this.prefs.minMatchScore}%</span></label>
-                            <input type="range" id="score-slider" min="0" max="100" value="${this.prefs.minMatchScore}">
-                        </div>
-
-                        <div class="mt-24">
-                            <button class="btn btn-primary" id="save-prefs">Save Preferences</button>
-                        </div>
-                    </div>
+            <header class="context-header"><h1>Preferences</h1><p class="subtext">Configure matching logic.</p></header>
+            <div class="main-grid" style="grid-template-columns:1fr;">
+                <div class="card">
+                    <div class="form-group"><label class="form-label">Ideal Roles</label><input type="text" id="role-keywords" value="${this.prefs.roleKeywords}" placeholder="e.g. SDE, Frontend"></div>
+                    <div class="form-group"><label class="form-label">Skills</label><input type="text" id="skills-input" value="${this.prefs.skills}" placeholder="e.g. React, Python"></div>
+                    <div class="form-group"><label class="form-label">Threshold: <span id="threshold-val">${this.prefs.minMatchScore}%</span></label><input type="range" id="score-slider" min="0" max="100" value="${this.prefs.minMatchScore}"></div>
+                    <button class="btn btn-primary mt-16" id="save-prefs">Save Preferences</button>
                 </div>
-                <aside class="secondary-panel">
-                    <div class="card">
-                        <h3 style="font-size:16px;">Matching Logic</h3>
-                        <p style="font-size:14px; line-height:1.6; color:rgba(17,17,17,0.6);">
-                            Our engine weighs your ideal role title (+25), skills overlap (+15), and location preference (+15) highest to ensure precision.
-                        </p>
-                    </div>
-                </aside>
-            </div>
-        `;
-
+            </div>`;
         const slider = document.getElementById('score-slider');
-        const thresholdVal = document.getElementById('threshold-val');
-        slider.addEventListener('input', () => { thresholdVal.innerText = `${slider.value}%`; });
-
-        document.getElementById('save-prefs').addEventListener('click', () => {
-            const updatedPrefs = {
-                roleKeywords: document.getElementById('role-keywords').value,
-                skills: document.getElementById('skills-input').value,
-                preferredLocations: Array.from(document.getElementById('pref-location-select').selectedOptions).map(o => o.value),
-                preferredMode: Array.from(document.querySelectorAll('.pref-mode:checked')).map(o => o.value),
-                experienceLevel: document.getElementById('pref-exp').value,
-                minMatchScore: parseInt(slider.value)
-            };
-            localStorage.setItem('jobTrackerPreferences', JSON.stringify(updatedPrefs));
-            this.prefs = updatedPrefs;
-            alert('Preferences saved.');
-        });
+        slider.oninput = () => document.getElementById('threshold-val').innerText = `${slider.value}%`;
+        document.getElementById('save-prefs').onclick = () => {
+            this.prefs = { ...this.prefs, roleKeywords: document.getElementById('role-keywords').value, skills: document.getElementById('skills-input').value, minMatchScore: parseInt(slider.value) };
+            localStorage.setItem('jobTrackerPreferences', JSON.stringify(this.prefs));
+            alert('Saved');
+        };
     },
 
-    // --- OTHER UI STUBS ---
-    renderLanding() {
-        this.root.innerHTML = `<section class="hero-section"><div class="text-max-width" style="margin: 0 auto;"><h1>Stop Missing The Right Jobs.</h1><p class="subtext">Precision-matched job discovery delivered daily at 9AM.</p><a href="/settings" class="btn btn-primary" style="padding: 16px 40px; font-size: 18px;">Start Tracking</a></div></section>`;
-    },
-    renderSaved() {
-        const savedIds = JSON.parse(localStorage.getItem('savedJobs') || '[]');
-        const savedJobs = this.jobs.filter(job => savedIds.includes(job.id.toString()));
-        this.root.innerHTML = `<header class="context-header"><h1>Saved</h1></header><div class="main-grid" style="grid-template-columns: 1fr;">${savedJobs.length ? `<div class="job-list-grid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap:24px;">${savedJobs.map(j => this.renderJobCard({ ...j, matchScore: this.calculateMatchScore(j) })).join('')}</div>` : `<div class="empty-state">No saved jobs.</div>`}</div>`;
-    },
-    renderDigest() { this.root.innerHTML = `<header class="context-header"><h1>Daily Digest</h1><p class="subtext">Future feature.</p></header>`; },
-    renderProof() { this.root.innerHTML = `<header class="context-header"><h1>Proof</h1><p class="subtext">Intelligence implemented.</p></header>`; },
+    renderLanding() { this.root.innerHTML = `<section class="hero-section"><h1 class="serif">Stop Missing The Right Jobs.</h1><p class="subtext">Daily at 9AM.</p><a href="/settings" class="btn btn-primary">Start Tracking</a></section>`; },
+    renderSaved() { this.root.innerHTML = `<header class="context-header"><h1>Saved</h1></header><div class="main-grid" style="grid-template-columns:1fr;"><div id="job-list" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(340px,1fr)); gap:24px;"></div></div>`; },
+    renderProof() { this.root.innerHTML = `<h1>Proof</h1>`; },
     render404() { this.root.innerHTML = `<h1>404</h1>`; },
-
-    updateActiveNav(path) {
-        this.navLinks.forEach(link => {
-            const href = link.getAttribute('href');
-            link.classList.toggle('active', href === path || (path === '/' && href === '/'));
-        });
-    },
-
+    updateActiveNav(path) { this.navLinks.forEach(link => link.classList.toggle('active', link.getAttribute('href') === path)); },
     viewJobDetails(id) {
         const job = this.jobs.find(j => j.id.toString() === id);
-        if (!job) return;
-        const score = this.calculateMatchScore(job);
-        this.modalContent.innerHTML = `
-            <span class="modal-close">&times;</span>
-            <div class="job-header mt-8">
-                <div><h2 class="serif">${job.title}</h2><div class="job-company">${job.company}</div></div>
-                <div class="score-badge ${this.getScoreClass(score)}">${score}% Match</div>
-            </div>
-            <div class="mt-24"><p>${job.description}</p></div>
-            <div class="mt-24">${job.skills.map(s => `<span class="skill-pill">${s}</span>`).join('')}</div>
-        `;
+        this.modalContent.innerHTML = `<span class="modal-close">&times;</span><h2 class="serif">${job.title}</h2><p class="mt-16">${job.description}</p>`;
         this.modal.style.display = 'flex';
-        document.body.style.overflow = 'hidden';
     },
-    closeModal() { this.modal.style.display = 'none'; document.body.style.overflow = 'auto'; }
+    closeModal() { this.modal.style.display = 'none'; },
+    toggleSaveJob(id, btn) {
+        let saved = JSON.parse(localStorage.getItem('savedJobs') || '[]');
+        if (saved.includes(id)) { saved = saved.filter(i => i !== id); btn.innerText = 'Save'; }
+        else { saved.push(id); btn.innerText = 'Saved'; }
+        localStorage.setItem('savedJobs', JSON.stringify(saved));
+    },
 };
 
 document.addEventListener('DOMContentLoaded', () => App.init());
