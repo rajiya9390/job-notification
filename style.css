@@ -815,3 +815,119 @@ input:checked+.slider:before {
     gap: var(--space-s);
     margin-top: var(--space-m);
 }
+
+/* STATUS BADGES & BUTTONS */
+.status-badge {
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.status-not-applied {
+    background: #F1F3F4;
+    color: #5F6368;
+}
+
+.status-applied {
+    background: #E8F0FE;
+    color: #1967D2;
+}
+
+.status-rejected {
+    background: #FCE8E6;
+    color: #D93025;
+}
+
+.status-selected {
+    background: #E6F4EA;
+    color: #1E8E3E;
+}
+
+.status-btn-group {
+    display: flex;
+    gap: 4px;
+    margin-top: 8px;
+}
+
+.status-btn {
+    padding: 4px 8px;
+    font-size: 11px;
+    border-radius: 4px;
+    border: 1px solid var(--color-border);
+    cursor: pointer;
+    background: var(--color-white);
+    color: rgba(17, 17, 17, 0.5);
+    transition: all 0.2s;
+}
+
+.status-btn:hover {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+}
+
+/* TOAST */
+.toast-container {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    z-index: 2000;
+    pointer-events: none;
+}
+
+.toast {
+    background: var(--color-text-primary);
+    color: var(--color-white);
+    padding: 12px 24px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    margin-bottom: 12px;
+    animation: toastIn 0.3s ease-out, toastOut 0.3s ease-in 2.7s forwards;
+    pointer-events: auto;
+}
+
+@keyframes toastIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes toastOut {
+    from {
+        transform: translateX(0);
+        opacity: 1;
+    }
+
+    to {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+}
+
+.updates-card {
+    background: var(--color-white);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
+    padding: var(--space-m);
+    margin-top: var(--space-l);
+}
+
+.update-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--color-bg);
+}
+
+.update-row:last-child {
+    border-bottom: none;
+}

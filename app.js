@@ -1,6 +1,6 @@
 /**
- * Job Notification Tracker - intelligence Layer v2
- * Implements preference logic, match scoring, and Daily Digest Engine.
+ * Job Notification Tracker - intelligence Layer v3
+ * Implements preference logic, match scoring, Daily Digest Engine, and Job Status Tracking.
  */
 
 const App = {
@@ -72,6 +72,8 @@ const App = {
         this.cacheDOM();
         this.bindEvents();
         this.loadPreferences();
+        this.loadStatuses();
+        this.addToastContainer();
         this.handleInitialRoute();
     },
 
@@ -95,6 +97,29 @@ const App = {
         };
     },
 
+    loadStatuses() {
+        this.jobStatuses = JSON.parse(localStorage.getItem('jobTrackerStatuses')) || {};
+        this.statusUpdates = JSON.parse(localStorage.getItem('jobTrackerUpdates')) || [];
+    },
+
+    addToastContainer() {
+        if (!document.getElementById('toast-container')) {
+            const container = document.createElement('div');
+            container.id = 'toast-container';
+            container.className = 'toast-container';
+            document.body.appendChild(container);
+        }
+    },
+
+    showToast(message) {
+        const container = document.getElementById('toast-container');
+        const toast = document.createElement('div');
+        toast.className = 'toast';
+        toast.innerText = message;
+        container.appendChild(toast);
+        setTimeout(() => toast.remove(), 3000);
+    },
+
     bindEvents() {
         document.addEventListener('click', (e) => {
             const link = e.target.closest('a');
@@ -107,6 +132,13 @@ const App = {
             if (e.target.matches('.btn-view')) this.viewJobDetails(e.target.dataset.id);
             if (e.target.matches('.btn-save')) this.toggleSaveJob(e.target.dataset.id, e.target);
             if (e.target.matches('.modal-close')) this.closeModal();
+
+            // Status update click
+            if (e.target.matches('.status-btn')) {
+                const jobId = e.target.dataset.id;
+                const status = e.target.dataset.status;
+                this.updateJobStatus(jobId, status);
+            }
 
             // Digest Listeners
             if (e.target.id === 'generate-digest') this.generateDailyDigest();
@@ -149,6 +181,32 @@ const App = {
         }
     },
 
+    // --- TRACKING LOGIC ---
+
+    updateJobStatus(jobId, status) {
+        this.jobStatuses[jobId] = status;
+        localStorage.setItem('jobTrackerStatuses', JSON.stringify(this.jobStatuses));
+
+        const job = this.jobs.find(j => j.id.toString() === jobId);
+        const update = {
+            jobId,
+            title: job.title,
+            company: job.company,
+            status,
+            date: new Date().toLocaleString('en-IN')
+        };
+        this.statusUpdates.unshift(update);
+        this.statusUpdates = this.statusUpdates.slice(0, 20); // Keep last 20
+        localStorage.setItem('jobTrackerUpdates', JSON.stringify(this.statusUpdates));
+
+        this.showToast(`Status updated: ${status}`);
+
+        // Dynamic UI refresh
+        if (window.location.pathname === '/dashboard' || window.location.pathname === '/saved') {
+            this.applyFilters();
+        }
+    },
+
     // --- MATCH ENGINE ---
 
     calculateMatchScore(job) {
@@ -186,19 +244,8 @@ const App = {
     generateDailyDigest() {
         const today = new Date().toISOString().split('T')[0];
         const key = `jobTrackerDigest_${today}`;
-
-        // Calculate scores for all jobs
-        const scoredJobs = this.jobs.map(job => ({
-            ...job,
-            matchScore: this.calculateMatchScore(job)
-        }));
-
-        // Filter and sort for top 10
-        const top10 = scoredJobs
-            .filter(j => j.matchScore > 0)
-            .sort((a, b) => b.matchScore - a.matchScore || a.postedDaysAgo - b.postedDaysAgo)
-            .slice(0, 10);
-
+        const scoredJobs = this.jobs.map(job => ({ ...job, matchScore: this.calculateMatchScore(job) }));
+        const top10 = scoredJobs.filter(j => j.matchScore > 0).sort((a, b) => b.matchScore - a.matchScore || a.postedDaysAgo - b.postedDaysAgo).slice(0, 10);
         localStorage.setItem(key, JSON.stringify(top10));
         this.renderDigest();
     },
@@ -211,113 +258,70 @@ const App = {
     copyDigestToClipboard() {
         const digest = this.getTodayDigest();
         if (!digest) return;
-
-        const text = digest.map((j, i) =>
-            `${i + 1}. ${j.title} @ ${j.company}\n   Score: ${j.matchScore}% | ${j.location}\n   Apply: ${j.applyUrl}`
-        ).join('\n\n');
-
-        navigator.clipboard.writeText(`My 9AM Job Digest - ${new Date().toDateString()}\n\n${text}`).then(() => {
-            alert('Digest copied to clipboard.');
-        });
+        const text = digest.map((j, i) => `${i + 1}. ${j.title} @ ${j.company}\n   Score: ${j.matchScore}% | ${j.location}`).join('\n\n');
+        navigator.clipboard.writeText(text).then(() => this.showToast('Copied to clipboard.'));
     },
 
     emailDigestDraft() {
         const digest = this.getTodayDigest();
         if (!digest) return;
-
-        const body = digest.map(j =>
-            `${j.title} at ${j.company} (${j.matchScore}% Match)\nLocation: ${j.location}\nApply: ${j.applyUrl}`
-        ).join('\n\n');
-
+        const body = digest.map(j => `${j.title} at ${j.company} (${j.matchScore}% Match)\nApply: ${j.applyUrl}`).join('\n\n');
         window.location.href = `mailto:?subject=My 9AM Job Digest&body=${encodeURIComponent(body)}`;
     },
 
     // --- PAGE RENDERERS ---
 
     renderDigest() {
-        const hasPrefs = this.prefs.roleKeywords || this.prefs.skills;
         const digest = this.getTodayDigest();
-        const todayStr = new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+        const hasPrefs = this.prefs.roleKeywords || this.prefs.skills;
 
         this.root.innerHTML = `
-            <header class="context-header">
-                <h1>Daily Digest</h1>
-                <p class="subtext">Curated intelligence delivered every morning.</p>
-            </header>
-            
+            <header class="context-header"><h1>Daily Digest</h1><p class="subtext">9AM Intelligence Summary.</p></header>
             <div class="digest-container">
-                ${!hasPrefs ? `
-                    <div class="empty-state">
-                        <h3>Configuration Required</h3>
-                        <p>Set preferences to generate a personalized digest.</p>
-                        <a href="/settings" class="btn btn-secondary">Go to Settings</a>
-                    </div>
-                ` : !digest ? `
-                    <div class="empty-state">
-                        <h3>No Digest Generated Yet</h3>
-                        <p>Simulate the automated 9AM trigger to view your top matches.</p>
-                        <button class="btn btn-primary mt-16" id="generate-digest">Generate Today's 9AM Digest (Simulated)</button>
-                    </div>
-                ` : digest.length === 0 ? `
-                    <div class="empty-state">
-                        <h3>No matching roles today.</h3>
-                        <p>Our engine couldn't find any high-intent roles matching your profile in the last 24 hours. Check again tomorrow.</p>
-                    </div>
-                ` : `
+                ${!hasPrefs ? `<div class="empty-state"><h3>Set preferences to generate digest.</h3></div>` : !digest ? `<div class="empty-state"><button class="btn btn-primary" id="generate-digest">Generate Today's Digest</button></div>` : `
                     <div class="digest-card">
-                        <div class="digest-email-header">
-                            <h2 class="serif">Top ${digest.length} Jobs For You — 9AM Digest</h2>
-                            <p style="color:rgba(17,17,17,0.5); font-weight:500;">${todayStr}</p>
-                        </div>
-                        
+                        <div class="digest-email-header"><h2 class="serif">Top ${digest.length} Jobs For You</h2></div>
                         <div class="digest-list">
-                            ${digest.map(job => `
-                                <div class="digest-item">
-                                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                                        <h3 class="serif" style="font-size:20px;">${job.title}</h3>
-                                        <div class="score-badge ${this.getScoreClass(job.matchScore)}">${job.matchScore}%</div>
-                                    </div>
-                                    <div class="digest-item-meta">
-                                        <strong>${job.company}</strong>  &bull;  ${job.location} &bull; ${job.experience}
-                                    </div>
-                                    <div class="mt-8">
-                                        <a href="${job.applyUrl}" target="_blank" class="btn btn-secondary" style="font-size:12px; padding:6px 12px;">Apply Now</a>
-                                    </div>
-                                </div>
-                            `).join('')}
+                            ${digest.map(job => `<div class="digest-item"><div style="display:flex; justify-content:space-between;"><h3>${job.title}</h3><span class="score-badge ${this.getScoreClass(job.matchScore)}">${job.matchScore}%</span></div><p>${job.company} &bull; ${job.location}</p></div>`).join('')}
                         </div>
-
-                        <div class="digest-footer">
-                            This digest was generated based on your preferences and intelligence threshold.<br>
-                            <span style="font-weight:600; color:var(--color-accent);">Demo Mode: Daily 9AM trigger simulated manually.</span>
-                        </div>
-                    </div>
-
-                    <div class="digest-actions-bar">
-                        <button class="btn btn-secondary" id="copy-digest">Copy Digest to Clipboard</button>
-                        <button class="btn btn-primary" id="email-digest">Create Email Draft</button>
-                        <button class="btn btn-secondary" id="generate-digest" style="opacity:0.6; font-size:12px;">Regenerate</button>
                     </div>
                 `}
+                
+                <div class="updates-card">
+                    <h3 class="serif" style="margin-bottom:16px;">Recent Status Updates</h3>
+                    ${this.statusUpdates.length ? this.statusUpdates.map(u => `
+                        <div class="update-row">
+                            <div><strong>${u.title}</strong> at ${u.company}</div>
+                            <div><span class="status-badge status-${u.status.toLowerCase().replace(' ', '-')}">${u.status}</span> <span style="font-size:12px; opacity:0.5; margin-left:8px;">${u.date}</span></div>
+                        </div>
+                    `).join('') : '<p style="opacity:0.5;">No recent status changes.</p>'}
+                </div>
+
+                ${digest ? `<div class="digest-actions-bar"><button class="btn btn-secondary" id="copy-digest">Copy</button><button class="btn btn-primary" id="email-digest">Draft Email</button></div>` : ''}
             </div>
         `;
     },
 
     renderDashboard() {
-        const hasPrefs = this.prefs.roleKeywords || this.prefs.skills;
         this.root.innerHTML = `
-            <header class="context-header"><h1>Intelligence Feed</h1><p class="subtext">Personalized job discovery engine.</p></header>
+            <header class="context-header"><h1>Job Feed</h1><p class="subtext">Personalized discovery engine.</p></header>
             <div class="main-grid" style="grid-template-columns: 1fr;">
-                ${!hasPrefs ? `<div class="banner">Set your preferences to activate intelligent matching.</div>` : ''}
                 <div class="filter-bar">
                     <div class="filter-group" style="flex:2;"><label class="filter-label">Search</label><input type="text" id="search-input" class="filter-input" placeholder="Title/Company..."></div>
+                    <div class="filter-group"><label class="filter-label">Status</label><select id="status-filter" class="filter-input">
+                        <option value="All">All Statuses</option>
+                        <option value="Not Applied">Not Applied</option>
+                        <option value="Applied">Applied</option>
+                        <option value="Rejected">Rejected</option>
+                        <option value="Selected">Selected</option>
+                    </select></div>
                     <div class="filter-group"><label class="filter-label">Sort</label><select id="sort-select" class="filter-input"><option value="latest">Latest</option><option value="score">Match Score</option></select></div>
-                    <div class="filter-group" style="justify-content:flex-end;"><div class="toggle-container"><span>Only High Matches</span><label class="switch"><input type="checkbox" id="match-toggle"><span class="slider"></span></label></div></div>
+                    <div class="filter-group" style="justify-content:flex-end;"><div class="toggle-container"><span>Elite Only</span><label class="switch"><input type="checkbox" id="match-toggle"><span class="slider"></span></label></div></div>
                 </div>
                 <div class="primary-workspace"><div id="job-list" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(340px, 1fr)); gap:24px;"></div></div>
             </div>
         `;
-        ['search-input', 'sort-select', 'match-toggle'].forEach(id => {
+        ['search-input', 'status-filter', 'sort-select', 'match-toggle'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.addEventListener('input', () => this.applyFilters());
         });
@@ -326,48 +330,86 @@ const App = {
 
     applyFilters() {
         const query = document.getElementById('search-input')?.value.toLowerCase() || '';
+        const statusFilter = document.getElementById('status-filter')?.value || 'All';
         const sort = document.getElementById('sort-select')?.value || 'latest';
         const onlyMatches = document.getElementById('match-toggle')?.checked || false;
-        let filtered = this.jobs.map(job => ({ ...job, matchScore: this.calculateMatchScore(job) }));
+
+        let filtered = this.jobs.map(job => ({ ...job, matchScore: this.calculateMatchScore(job), status: this.jobStatuses[job.id] || 'Not Applied' }));
+
         filtered = filtered.filter(job => {
             const matchesQuery = job.title.toLowerCase().includes(query) || job.company.toLowerCase().includes(query);
+            const matchesStatus = statusFilter === 'All' || job.status === statusFilter;
             const matchesThreshold = !onlyMatches || job.matchScore >= this.prefs.minMatchScore;
-            return matchesQuery && matchesThreshold;
+            return matchesQuery && matchesStatus && matchesThreshold;
         });
+
         if (sort === 'score') filtered.sort((a, b) => b.matchScore - a.matchScore);
         else filtered.sort((a, b) => a.postedDaysAgo - b.postedDaysAgo);
+
         const listEl = document.getElementById('job-list');
-        if (listEl) listEl.innerHTML = filtered.length ? filtered.map(job => this.renderJobCard(job)).join('') : `<div class="empty-state" style="grid-column:1/-1;"><h3>No roles match your criteria.</h3></div>`;
+        if (listEl) listEl.innerHTML = filtered.length ? filtered.map(job => this.renderJobCard(job)).join('') : `<div class="empty-state"><h3>No results.</h3></div>`;
     },
 
     renderJobCard(job) {
+        const currentStatus = this.jobStatuses[job.id] || 'Not Applied';
+        const statusClass = currentStatus.toLowerCase().replace(' ', '-');
         const scoreClass = this.getScoreClass(job.matchScore);
         const savedIds = JSON.parse(localStorage.getItem('savedJobs') || '[]');
-        return `<div class="job-card"><div class="job-header"><div><div class="job-title">${job.title}</div><div class="job-company">${job.company}</div></div><div class="score-badge ${scoreClass}">${job.matchScore}% Match</div></div><div class="job-meta"><div class="meta-item">📍 ${job.location}</div><div class="meta-item">🕒 ${job.mode}</div></div><div class="job-actions"><button class="btn btn-secondary btn-view" data-id="${job.id}">View</button><button class="btn btn-secondary btn-save" data-id="${job.id}">${savedIds.includes(job.id.toString()) ? 'Saved' : 'Save'}</button><a href="${job.applyUrl}" target="_blank" class="btn btn-primary">Apply</a></div></div>`;
+
+        return `
+            <div class="job-card">
+                <div class="job-header">
+                    <div><div class="job-title">${job.title}</div><div class="job-company">${job.company}</div></div>
+                    <span class="status-badge status-${statusClass}">${currentStatus}</span>
+                </div>
+                <div class="job-meta">
+                    <div class="meta-item">📍 ${job.location}</div>
+                    <div class="meta-item">🕒 ${job.mode}</div>
+                    <div class="score-badge ${scoreClass}">${job.matchScore}%</div>
+                </div>
+                
+                <div class="status-btn-group">
+                    <button class="status-btn" data-id="${job.id}" data-status="Applied">Applied</button>
+                    <button class="status-btn" data-id="${job.id}" data-status="Rejected">Rejected</button>
+                    <button class="status-btn" data-id="${job.id}" data-status="Selected">Selected</button>
+                    <button class="status-btn" data-id="${job.id}" data-status="Not Applied" style="font-size:9px;">Reset</button>
+                </div>
+
+                <div class="job-actions" style="margin-top:12px;">
+                    <button class="btn btn-secondary btn-view" data-id="${job.id}">View</button>
+                    <button class="btn btn-secondary btn-save" data-id="${job.id}">${savedIds.includes(job.id.toString()) ? 'Saved' : 'Save'}</button>
+                    <a href="${job.applyUrl}" target="_blank" class="btn btn-primary">Apply</a>
+                </div>
+            </div>
+        `;
     },
 
     renderSettings() {
-        this.root.innerHTML = `
-            <header class="context-header"><h1>Preferences</h1><p class="subtext">Configure matching logic.</p></header>
-            <div class="main-grid" style="grid-template-columns:1fr;">
-                <div class="card">
-                    <div class="form-group"><label class="form-label">Ideal Roles</label><input type="text" id="role-keywords" value="${this.prefs.roleKeywords}" placeholder="e.g. SDE, Frontend"></div>
-                    <div class="form-group"><label class="form-label">Skills</label><input type="text" id="skills-input" value="${this.prefs.skills}" placeholder="e.g. React, Python"></div>
-                    <div class="form-group"><label class="form-label">Threshold: <span id="threshold-val">${this.prefs.minMatchScore}%</span></label><input type="range" id="score-slider" min="0" max="100" value="${this.prefs.minMatchScore}"></div>
-                    <button class="btn btn-primary mt-16" id="save-prefs">Save Preferences</button>
-                </div>
-            </div>`;
+        this.root.innerHTML = `<header class="context-header"><h1>Settings</h1></header><div class="card">
+            <div class="form-group"><label class="form-label">Ideal Roles</label><input type="text" id="role-keywords" value="${this.prefs.roleKeywords}"></div>
+            <div class="form-group"><label class="form-label">Skills</label><input type="text" id="skills-input" value="${this.prefs.skills}"></div>
+            <div class="form-group"><label class="form-label">Threshold: <span id="threshold-val">${this.prefs.minMatchScore}%</span></label><input type="range" id="score-slider" min="0" max="100" value="${this.prefs.minMatchScore}"></div>
+            <button class="btn btn-primary" id="save-prefs">Save</button>
+        </div>`;
         const slider = document.getElementById('score-slider');
         slider.oninput = () => document.getElementById('threshold-val').innerText = `${slider.value}%`;
         document.getElementById('save-prefs').onclick = () => {
             this.prefs = { ...this.prefs, roleKeywords: document.getElementById('role-keywords').value, skills: document.getElementById('skills-input').value, minMatchScore: parseInt(slider.value) };
             localStorage.setItem('jobTrackerPreferences', JSON.stringify(this.prefs));
-            alert('Saved');
+            this.showToast('Preferences saved');
         };
     },
 
-    renderLanding() { this.root.innerHTML = `<section class="hero-section"><h1 class="serif">Stop Missing The Right Jobs.</h1><p class="subtext">Daily at 9AM.</p><a href="/settings" class="btn btn-primary">Start Tracking</a></section>`; },
-    renderSaved() { this.root.innerHTML = `<header class="context-header"><h1>Saved</h1></header><div class="main-grid" style="grid-template-columns:1fr;"><div id="job-list" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(340px,1fr)); gap:24px;"></div></div>`; },
+    renderLanding() { this.root.innerHTML = `<section class="hero-section"><h1>Stop Missing Jobs.</h1><a href="/dashboard" class="btn btn-primary">Open Feed</a></section>`; },
+    renderSaved() {
+        this.root.innerHTML = `<header class="context-header"><h1>Saved</h1></header><div class="main-grid" style="grid-template-columns: 1fr;"><div id="job-list" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(340px,1fr)); gap:24px;"></div></div>`;
+        this.applySavedFilters();
+    },
+    applySavedFilters() {
+        const savedIds = JSON.parse(localStorage.getItem('savedJobs') || '[]');
+        const filtered = this.jobs.filter(j => savedIds.includes(j.id.toString())).map(j => ({ ...j, matchScore: this.calculateMatchScore(j), status: this.jobStatuses[j.id] || 'Not Applied' }));
+        document.getElementById('job-list').innerHTML = filtered.length ? filtered.map(j => this.renderJobCard(j)).join('') : '<div class="empty-state"><h3>No saved jobs.</h3></div>';
+    },
     renderProof() { this.root.innerHTML = `<h1>Proof</h1>`; },
     render404() { this.root.innerHTML = `<h1>404</h1>`; },
     updateActiveNav(path) { this.navLinks.forEach(link => link.classList.toggle('active', link.getAttribute('href') === path)); },
@@ -382,6 +424,7 @@ const App = {
         if (saved.includes(id)) { saved = saved.filter(i => i !== id); btn.innerText = 'Save'; }
         else { saved.push(id); btn.innerText = 'Saved'; }
         localStorage.setItem('savedJobs', JSON.stringify(saved));
+        this.showToast(saved.includes(id) ? 'Job saved' : 'Job removed');
     },
 };
 
