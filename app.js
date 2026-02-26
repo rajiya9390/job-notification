@@ -1,6 +1,6 @@
 /**
- * Job Notification Tracker - intelligence Layer v3
- * Implements preference logic, match scoring, Daily Digest Engine, and Job Status Tracking.
+ * Job Notification Tracker - intelligence Layer v4
+ * Implements preference logic, match scoring, Daily Digest Engine, Job Status Tracking, and Test Checklist System.
  */
 
 const App = {
@@ -68,11 +68,25 @@ const App = {
         { id: 60, title: 'Junior DevOps Engineer', company: 'Darwinbox', location: 'Hyderabad', mode: 'Onsite', experience: '0-1', skills: ['Ansible', 'Terraform', 'AWS'], source: 'LinkedIn', postedDaysAgo: 4, salaryRange: '7–10 LPA', applyUrl: 'https://darwinbox.com/jobs/60', description: 'Help us automate the global HCM platform used by millions. Focus on infrastructure as code and site reliability.' }
     ],
 
+    testItems: [
+        { id: 't1', label: 'Preferences persist after refresh', how: 'Set preferences, refresh, confirm values remain.' },
+        { id: 't2', label: 'Match score calculates correctly', how: 'Verify score on a role matches configured logic weights.' },
+        { id: 't3', label: '"Show only matches" toggle works', how: 'Toggle dashboard switch, ensure low-score roles hide.' },
+        { id: 't4', label: 'Save job persists after refresh', how: 'Save a role, refresh, confirm "Saved" badge remains.' },
+        { id: 't5', label: 'Apply opens in new tab', how: 'Click apply, verify new browser tab opens with URL.' },
+        { id: 't6', label: 'Status update persists after refresh', how: 'Change status to Applied, refresh, confirm badge remains.' },
+        { id: 't7', label: 'Status filter works correctly', how: 'Filter by "Applied", verify only matching jobs show.' },
+        { id: 't8', label: 'Digest generates top 10 by score', how: 'Generate digest, verify roles are highest-scoring available.' },
+        { id: 't9', label: 'Digest persists for the day', how: 'Generate digest, refresh, confirm data is still loaded.' },
+        { id: 't10', label: 'No console errors on main pages', how: 'Open DevTools, navigate all pages, confirm 0 red errors.' }
+    ],
+
     init() {
         this.cacheDOM();
         this.bindEvents();
         this.loadPreferences();
         this.loadStatuses();
+        this.loadTestStatus();
         this.addToastContainer();
         this.handleInitialRoute();
     },
@@ -100,6 +114,10 @@ const App = {
     loadStatuses() {
         this.jobStatuses = JSON.parse(localStorage.getItem('jobTrackerStatuses')) || {};
         this.statusUpdates = JSON.parse(localStorage.getItem('jobTrackerUpdates')) || [];
+    },
+
+    loadTestStatus() {
+        this.testStatus = JSON.parse(localStorage.getItem('jobTrackerTestStatus')) || {};
     },
 
     addToastContainer() {
@@ -140,6 +158,14 @@ const App = {
                 this.updateJobStatus(jobId, status);
             }
 
+            // Checklist toggle
+            if (e.target.matches('.test-checkbox')) {
+                this.toggleTest(e.target.dataset.id, e.target.checked);
+            }
+
+            // Reset tests
+            if (e.target.id === 'reset-tests') this.resetTests();
+
             // Digest Listeners
             if (e.target.id === 'generate-digest') this.generateDailyDigest();
             if (e.target.id === 'copy-digest') this.copyDigestToClipboard();
@@ -176,9 +202,26 @@ const App = {
             case '/settings': this.renderSettings(); break;
             case '/saved': this.renderSaved(); break;
             case '/digest': this.renderDigest(); break;
+            case '/jt/07-test': this.renderTest(); break;
+            case '/jt/08-ship': this.renderShip(); break;
             case '/proof': this.renderProof(); break;
             default: this.render404(); break;
         }
+    },
+
+    // --- TEST LOGIC ---
+
+    toggleTest(id, val) {
+        this.testStatus[id] = val;
+        localStorage.setItem('jobTrackerTestStatus', JSON.stringify(this.testStatus));
+        this.renderTest(); // Refresh summary live
+    },
+
+    resetTests() {
+        this.testStatus = {};
+        localStorage.removeItem('jobTrackerTestStatus');
+        this.renderTest();
+        this.showToast('Test status reset.');
     },
 
     // --- TRACKING LOGIC ---
@@ -270,6 +313,74 @@ const App = {
     },
 
     // --- PAGE RENDERERS ---
+
+    renderTest() {
+        const passedCount = Object.values(this.testStatus).filter(Boolean).length;
+        this.root.innerHTML = `
+            <header class="context-header">
+                <h1>Test Checklist</h1>
+                <p class="subtext">Verify core intelligence features before shipping.</p>
+            </header>
+            
+            <div class="primary-workspace" style="max-width: 800px; margin: 0 auto;">
+                <div class="checklist-summary">
+                    <div>
+                        <h2 style="font-size:24px;">Tests Passed: ${passedCount} / 10</h2>
+                        ${passedCount < 10 ? '<p class="checklist-warning">Resolve all issues before shipping.</p>' : '<p style="color:#1E8E3E; font-weight:600;">System verified. Ready for ship.</p>'}
+                    </div>
+                    <button class="btn btn-secondary" id="reset-tests" style="font-size:12px;">Reset Test Status</button>
+                </div>
+
+                <div class="card">
+                    ${this.testItems.map(item => `
+                        <div class="checklist-row">
+                            <input type="checkbox" class="test-checkbox" data-id="${item.id}" ${this.testStatus[item.id] ? 'checked' : ''} style="width:20px; height:20px; cursor:pointer;">
+                            <span class="checklist-label">${item.label}</span>
+                            <span class="how-to-test" title="${item.how}">How to test</span>
+                        </div>
+                    `).join('')}
+                </div>
+                
+                <div class="mt-24" style="text-align:center;">
+                    <a href="/jt/08-ship" class="btn btn-primary" style="padding:16px 48px; font-size:18px;">Proceed to Ship</a>
+                </div>
+            </div>
+        `;
+    },
+
+    renderShip() {
+        const passedCount = Object.values(this.testStatus).filter(Boolean).length;
+        const isLocked = passedCount < 10;
+
+        this.root.innerHTML = `
+            <header class="context-header">
+                <h1>Ready to Ship</h1>
+                <p class="subtext">Final deployment handshake.</p>
+            </header>
+            
+            <div class="primary-workspace">
+                ${isLocked ? `
+                    <div class="ship-lock-screen">
+                        <div class="lock-icon">🔒</div>
+                        <h2 class="serif">Shipment Locked</h2>
+                        <p style="opacity:0.6; max-width:400px; margin: 16px auto;">Complete all 10 tests in the checklist to unlock final shipment credentials.</p>
+                        <a href="/jt/07-test" class="btn btn-secondary mt-24">Back to Checklist</a>
+                    </div>
+                ` : `
+                    <div class="ship-lock-screen">
+                        <div class="lock-icon">🚀</div>
+                        <h2 class="serif">All Systems Go</h2>
+                        <p style="color:#1E8E3E; font-weight:600;">100% Test Coverage Verified</p>
+                        <div class="card mt-24" style="max-width:500px; margin-left:auto; margin-right:auto; text-align:left;">
+                            <h3 class="serif">Deployment Key: <span style="font-family:monospace; background:var(--color-bg); padding:4px 8px; border-radius:4px;">JT-PRM-OFFLINE-SUCCESS</span></h3>
+                            <p class="mt-8" style="font-size:14px; opacity:0.6;">Your tracking system is now rigorously verified and ready for professional use.</p>
+                        </div>
+                        <a href="/dashboard" class="btn btn-primary mt-24">Return to Dashboard</a>
+                    </div>
+                `}
+            </div>
+        `;
+    },
 
     renderDigest() {
         const digest = this.getTodayDigest();
