@@ -14,10 +14,29 @@
     <div class="app-wrapper">
         <!-- TOP BAR -->
         <header class="top-bar">
-            <div class="top-bar-left">Job Notification App</div>
-            <div class="top-bar-center" id="progress-indicator">Step 1 / 4</div>
+            <div class="top-bar-left">
+                <a href="/" class="logo-link">Job Notification App</a>
+            </div>
+
+            <nav class="main-nav">
+                <button class="mobile-toggle" id="mobile-toggle" aria-label="Toggle menu">
+                    <span class="hamburger-line"></span>
+                    <span class="hamburger-line"></span>
+                    <span class="hamburger-line"></span>
+                </button>
+                <ul class="nav-links" id="nav-menu">
+                    <li><a href="/dashboard" class="nav-link">Dashboard</a></li>
+                    <li><a href="/saved" class="nav-link">Saved</a></li>
+                    <li><a href="/digest" class="nav-link">Digest</a></li>
+                    <li><a href="/settings" class="nav-link">Settings</a></li>
+                    <li><a href="/proof" class="nav-link">Proof</a></li>
+                </ul>
+            </nav>
+
             <div class="top-bar-right">
-                <span class="status-badge" id="status-badge">Not Started</span>
+                <div id="progress-indicator" style="font-size: 14px; color: rgba(17,17,17,0.4); margin-right: 16px;">
+                    V1.0</div>
+                <span class="status-badge active" id="status-badge">Design Phase</span>
             </div>
         </header>
 
